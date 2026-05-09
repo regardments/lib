@@ -5,7 +5,7 @@ local ThemeManager = {} do
 
 	ThemeManager.Library = nil
 	ThemeManager.BuiltInThemes = {
-['Default']={1,httpService:JSONDecode('{"FontColor":"ffffff","MainColor":"1c1c1c","AccentColor":"ffffff","BackgroundColor":"141414","OutlineColor":"323232"}')},
+['Dark Default']={1,httpService:JSONDecode('{"FontColor":"ffffff","MainColor":"1c1c1c","AccentColor":"ffffff","BackgroundColor":"141414","OutlineColor":"323232"}')},
 ['Pink Blossom']={2,httpService:JSONDecode('{"FontColor":"ffffff","MainColor":"2b2428","AccentColor":"ffb6d9","BackgroundColor":"211b1f","OutlineColor":"3a3136"}')},
 ['Sky Dream']={3,httpService:JSONDecode('{"FontColor":"ffffff","MainColor":"202a36","AccentColor":"7fd6ff","BackgroundColor":"181f29","OutlineColor":"344252"}')},
 ['Crimson']={4,httpService:JSONDecode('{"FontColor":"ffffff","MainColor":"2a1b1b","AccentColor":"ff4d4d","BackgroundColor":"1c1414","OutlineColor":"4a2a2a"}')},
@@ -13,6 +13,9 @@ local ThemeManager = {} do
 ['Pearl']={6,httpService:JSONDecode('{"FontColor":"ffffff","MainColor":"d9d9d9","AccentColor":"e6d5ff","BackgroundColor":"bfbfbf","OutlineColor":"8f8f8f"}')},
 ['Obsidian']={7,httpService:JSONDecode('{"FontColor":"ffffff","MainColor":"0d0d0d","AccentColor":"1f1f1f","BackgroundColor":"080808","OutlineColor":"2a2a2a"}')},
 	}
+
+	-- Set Pink Blossom as the default theme
+	ThemeManager.DefaultTheme = 'Pink Blossom'
 
 	function ThemeManager:ApplyTheme(theme)
 		local customThemeData = self:GetCustomTheme(theme)
@@ -48,7 +51,7 @@ local ThemeManager = {} do
 	end
 
 	function ThemeManager:LoadDefault()		
-		local theme = 'Default'
+		local theme = self.DefaultTheme  -- Use Pink Blossom as default
 		local content = isfile(self.Folder .. '/themes/default.txt') and readfile(self.Folder .. '/themes/default.txt')
 
 		local isDefault = true
@@ -59,8 +62,6 @@ local ThemeManager = {} do
 				theme = content
 				isDefault = false;
 			end
-		elseif self.BuiltInThemes[self.DefaultTheme] then
-		 	theme = self.DefaultTheme
 		end
 
 		if isDefault then
