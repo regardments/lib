@@ -10,7 +10,7 @@ local ThemeManager = {} do
 ['Sky Dream']={3,httpService:JSONDecode('{"FontColor":"ffffff","MainColor":"202a36","AccentColor":"7fd6ff","BackgroundColor":"181f29","OutlineColor":"344252"}')},
 ['Crimson']={4,httpService:JSONDecode('{"FontColor":"ffffff","MainColor":"2a1b1b","AccentColor":"ff4d4d","BackgroundColor":"1c1414","OutlineColor":"4a2a2a"}')},
 ['Sunset']={5,httpService:JSONDecode('{"FontColor":"ffffff","MainColor":"2b211b","AccentColor":"ff9b42","BackgroundColor":"1f1814","OutlineColor":"4a3628"}')},
-['Pearl']={6,httpService:JSONDecode('{"FontColor":"2b2b2b","MainColor":"fffdf7","AccentColor":"e6d5ff","BackgroundColor":"f4f1ea","OutlineColor":"d8d2c7"}')},
+['Pearl']={6,httpService:JSONDecode('{"FontColor":"f3f3f3","MainColor":"d9d9d9","AccentColor":"e6d5ff","BackgroundColor":"bfbfbf","OutlineColor":"8f8f8f"}')},
 ['Obsidian']={7,httpService:JSONDecode('{"FontColor":"ffffff","MainColor":"0d0d0d","AccentColor":"1f1f1f","BackgroundColor":"080808","OutlineColor":"2a2a2a"}')},
 	}
 
