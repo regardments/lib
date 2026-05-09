@@ -5,12 +5,12 @@ local ThemeManager = {} do
 
 	ThemeManager.Library = nil
 	ThemeManager.BuiltInThemes = {
-['Dark Default']={1,httpService:JSONDecode('{"FontColor":"ffffff","MainColor":"1c1c1c","AccentColor":"ffffff","BackgroundColor":"141414","OutlineColor":"323232"}')},
-['Pink Blossom']={2,httpService:JSONDecode('{"FontColor":"ffffff","MainColor":"2b2428","AccentColor":"ffb6d9","BackgroundColor":"211b1f","OutlineColor":"3a3136"}')},
+['Pink Blossom']={1,httpService:JSONDecode('{"FontColor":"ffffff","MainColor":"2b2428","AccentColor":"ffb6d9","BackgroundColor":"211b1f","OutlineColor":"3a3136"}')},
+['Dark']={2,httpService:JSONDecode('{"FontColor":"ffffff","MainColor":"1c1c1c","AccentColor":"ffffff","BackgroundColor":"141414","OutlineColor":"323232"}')},
 ['Sky Dream']={3,httpService:JSONDecode('{"FontColor":"ffffff","MainColor":"202a36","AccentColor":"7fd6ff","BackgroundColor":"181f29","OutlineColor":"344252"}')},
 ['Crimson']={4,httpService:JSONDecode('{"FontColor":"ffffff","MainColor":"2a1b1b","AccentColor":"ff4d4d","BackgroundColor":"1c1414","OutlineColor":"4a2a2a"}')},
 ['Sunset']={5,httpService:JSONDecode('{"FontColor":"ffffff","MainColor":"2b211b","AccentColor":"ff9b42","BackgroundColor":"1f1814","OutlineColor":"4a3628"}')},
-['Pearl']={6,httpService:JSONDecode('{"FontColor":"ffffff","MainColor":"d9d9d9","AccentColor":"e6d5ff","BackgroundColor":"bfbfbf","OutlineColor":"8f8f8f"}')},
+['Pearl']={6,httpService:JSONDecode('{"FontColor":"e6d5ff","MainColor":"b8a9d4","AccentColor":"9b7bc9","BackgroundColor":"8a7bb8","OutlineColor":"6b5b9e"}')},
 ['Obsidian']={7,httpService:JSONDecode('{"FontColor":"ffffff","MainColor":"0d0d0d","AccentColor":"1f1f1f","BackgroundColor":"080808","OutlineColor":"2a2a2a"}')},
 	}
 
