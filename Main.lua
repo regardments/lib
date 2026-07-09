@@ -1,7 +1,7 @@
 -- ──────────────────────────────────────────────
 --  LIBRARY
 -- ──────────────────────────────────────────────
-local repo = 'https://raw.githubusercontent.com/regardments/lib/refs/heads/main/Library.lua'
+local repo = 'https://github.com/regardments/lib/tree/main'
 
 local Library = loadstring(game:HttpGet(repo .. 'Library.lua'))()
 local ThemeManager = loadstring(game:HttpGet(repo .. 'ThemeManager.lua'))()
