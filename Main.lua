@@ -1,11 +1,11 @@
 -- ──────────────────────────────────────────────
 --  LIBRARY
 -- ──────────────────────────────────────────────
-local repo = 'https://raw.githubusercontent.com/violin-suzutsuki/LinoriaLib/main/'
+local repo = 'https://raw.githubusercontent.com/regardments/lib/refs/heads/main/Library.lua'
 
 local Library = loadstring(game:HttpGet(repo .. 'Library.lua'))()
-local ThemeManager = loadstring(game:HttpGet(repo .. 'addons/ThemeManager.lua'))()
-local SaveManager = loadstring(game:HttpGet(repo .. 'addons/SaveManager.lua'))()
+local ThemeManager = loadstring(game:HttpGet(repo .. 'ThemeManager.lua'))()
+local SaveManager = loadstring(game:HttpGet(repo .. 'SaveManager.lua'))()
 
 -- ──────────────────────────────────────────────
 --  WINDOW
