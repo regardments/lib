@@ -11,7 +11,7 @@ local SaveManager  = loadstring(game:HttpGet(repo .. 'SaveManager.lua'))()
 --  WINDOW
 -- ──────────────────────────────────────────────
 local Window = Library:CreateWindow({
-    Title = 'Bloodlines',
+    Title = 'Bloodlines | Regardments',
     Center = true,
     AutoShow = true,
     TabPadding = 8,
