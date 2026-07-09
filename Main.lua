@@ -1,9 +1,11 @@
 -- ──────────────────────────────────────────────
 --  LIBRARY
 -- ──────────────────────────────────────────────
-local Library      = loadstring(game:HttpGet('https://raw.githubusercontent.com/regardments/lib/main/Library.lua'))()
-local ThemeManager = loadstring(game:HttpGet('https://raw.githubusercontent.com/regardments/lib/main/ThemeManager.lua'))()
-local SaveManager  = loadstring(game:HttpGet('https://raw.githubusercontent.com/regardments/lib/main/SaveManager.lua'))()
+local repo = 'https://raw.githubusercontent.com/regardments/lib/main/'
+
+local Library      = loadstring(game:HttpGet(repo .. 'Library.lua'))()
+local ThemeManager = loadstring(game:HttpGet(repo .. 'ThemeManager.lua'))()
+local SaveManager  = loadstring(game:HttpGet(repo .. 'SaveManager.lua'))()
 
 -- ──────────────────────────────────────────────
 --  WINDOW
