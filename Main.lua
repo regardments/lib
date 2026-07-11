@@ -26,6 +26,7 @@ local Tabs = {
     Combat = Window:AddTab('Combat'),
     Teleports = Window:AddTab('Teleports'),
     ESP = Window:AddTab('ESP'),
+    ['Quality Of Life'] = Window:AddTab('Quality Of Life'),
     ['UI Settings'] = Window:AddTab('UI Settings'),
 }
 
@@ -305,6 +306,7 @@ local ESPEnabled = false
 local ESPBoxEnabled = true
 local ESPHealthBarEnabled = true
 local ESPNamesEnabled = true
+local ESPMaxDistance = 7500
 
 local function hpColor(pct)
     -- Transición suave de verde (100%) a rojo (0%)
@@ -332,6 +334,7 @@ local function createESP(character)
     bb.StudsOffset = Vector3.new(0, 3.2, 0)
     bb.AlwaysOnTop = true
     bb.Enabled = false
+    bb.MaxDistance = ESPMaxDistance
     bb.Parent = root
 
     local lbl = Instance.new('TextLabel')
@@ -474,7 +477,6 @@ local function updateESPHeartbeat()
     end
 
     frameIdx = frameIdx + 1
-    local doRaycast = (frameIdx % 4 == 0)
     rayParams.FilterDescendantsInstances = {localChar}
 
     local active = {}
@@ -500,15 +502,22 @@ local function updateESPHeartbeat()
         local root     = e.root
         local humanoid = e.humanoid
         local dist     = (root.Position - localRoot.Position).Magnitude
+        
+        -- Actualizar MaxDistance del BillboardGui
+        if e.bb.MaxDistance ~= ESPMaxDistance then
+            e.bb.MaxDistance = ESPMaxDistance
+        end
+        
+        -- Ocultar si está fuera del rango
+        if dist > ESPMaxDistance then
+            e.bb.Enabled = false
+            hideDrawings(e)
+            continue
+        end
+        
         local hp       = math.clamp(humanoid.Health, 0, humanoid.MaxHealth)
         local maxHp    = humanoid.MaxHealth
         local pct      = maxHp > 0 and (hp / maxHp) or 0
-
-        if doRaycast then
-            local origin = Camera.CFrame.Position
-            local result = workspace:Raycast(origin, root.Position - origin, rayParams)
-            visCache[model] = (result == nil)
-        end
 
         local showNames = ESPNamesEnabled
         e.bb.Enabled = showNames
@@ -525,7 +534,9 @@ local function updateESPHeartbeat()
             x2 = x2 + 2
             y2 = y2 + 2
 
-            local showBox = ESPBoxEnabled
+            local closeEnough = dist <= 150
+
+            local showBox = ESPBoxEnabled and closeEnough
             local bl = e.lines
             local boxCol = C_WHITE
             for _, l in ipairs(bl) do
@@ -543,7 +554,7 @@ local function updateESPHeartbeat()
                 bl[4].To = Vector2.new(x2, y2)
             end
 
-            local showHp = ESPHealthBarEnabled
+            local showHp = ESPHealthBarEnabled and closeEnough
             e.hpBorderL.Visible = showHp
             e.hpBorderR.Visible = showHp
             e.hpBorderT.Visible = showHp
@@ -583,16 +594,450 @@ local function updateESPHeartbeat()
 end
 
 -- ──────────────────────────────────────────────
+--  MOVEMENT / UTILITY LOGIC
+-- ──────────────────────────────────────────────
+local UIS = game:GetService('UserInputService')
+
+-- No Fall Damage
+local noFallDmgConn = nil
+local function setNoFallDamage(enabled)
+    local function patchChar(char)
+        local h = char:WaitForChild('Humanoid', 5)
+        if not h then return end
+        -- Use FallingDown state disable + HealthChanged immunity approach
+        h:SetStateEnabled(Enum.HumanoidStateType.FallingDown, not enabled)
+        if enabled then
+            -- Zero out fall damage by keeping health on landing
+            local lastHp = h.Health
+            h.HealthChanged:Connect(function(hp)
+                if h:GetState() == Enum.HumanoidStateType.Landed and hp < lastHp then
+                    h.Health = lastHp
+                end
+                lastHp = h.Health
+            end)
+        end
+    end
+    if enabled then
+        local char = LocalPlayer.Character
+        if char then patchChar(char) end
+        noFallDmgConn = LocalPlayer.CharacterAdded:Connect(patchChar)
+    else
+        if noFallDmgConn then noFallDmgConn:Disconnect(); noFallDmgConn = nil end
+        local char = LocalPlayer.Character
+        if char then
+            local h = char:FindFirstChildOfClass('Humanoid')
+            if h then h:SetStateEnabled(Enum.HumanoidStateType.FallingDown, true) end
+        end
+    end
+end
+
+-- WalkSpeed
+local walkspeedConn = nil
+local function setWalkSpeed(enabled, speed)
+    if walkspeedConn then walkspeedConn:Disconnect(); walkspeedConn = nil end
+    local function applySpeed(char)
+        local h = char:FindFirstChildOfClass('Humanoid')
+        if h then h.WalkSpeed = enabled and speed or 16 end
+    end
+    if enabled then
+        local char = LocalPlayer.Character
+        if char then applySpeed(char) end
+        walkspeedConn = LocalPlayer.CharacterAdded:Connect(applySpeed)
+    else
+        local char = LocalPlayer.Character
+        if char then applySpeed(char) end
+    end
+end
+
+-- Fly
+local flyConn = nil
+local flyBodyVel = nil
+local flyBodyGyro = nil
+local flyEnabled = false
+local FLY_SPEED = 50
+
+local function stopFly()
+    flyEnabled = false
+    if flyBodyVel  then flyBodyVel:Destroy();  flyBodyVel  = nil end
+    if flyBodyGyro then flyBodyGyro:Destroy(); flyBodyGyro = nil end
+    if flyConn     then flyConn:Disconnect();  flyConn     = nil end
+    local char = LocalPlayer.Character
+    if char then
+        local root = char:FindFirstChild('HumanoidRootPart')
+        if root then root.AssemblyLinearVelocity = Vector3.zero end
+        local h = char:FindFirstChildOfClass('Humanoid')
+        if h then h:ChangeState(Enum.HumanoidStateType.GettingUp) end
+    end
+end
+
+local function startFly(speed)
+    local char = LocalPlayer.Character
+    if not char then return end
+    local root = char:FindFirstChild('HumanoidRootPart')
+    local hum  = char:FindFirstChildOfClass('Humanoid')
+    if not root or not hum then return end
+
+    flyEnabled = true
+    hum:ChangeState(Enum.HumanoidStateType.Flying)
+
+    flyBodyVel = Instance.new('BodyVelocity')
+    flyBodyVel.MaxForce = Vector3.new(1e5,1e5,1e5)
+    flyBodyVel.Velocity  = Vector3.zero
+    flyBodyVel.Parent    = root
+
+    flyBodyGyro = Instance.new('BodyGyro')
+    flyBodyGyro.MaxTorque = Vector3.new(1e5,1e5,1e5)
+    flyBodyGyro.P          = 1e4
+    flyBodyGyro.CFrame     = root.CFrame
+    flyBodyGyro.Parent     = root
+
+    flyConn = RunService.RenderStepped:Connect(function()
+        if not flyEnabled then return end
+        local cam = workspace.CurrentCamera
+        local dir = Vector3.zero
+        if UIS:IsKeyDown(Enum.KeyCode.W) then dir = dir + cam.CFrame.LookVector end
+        if UIS:IsKeyDown(Enum.KeyCode.S) then dir = dir - cam.CFrame.LookVector end
+        if UIS:IsKeyDown(Enum.KeyCode.A) then dir = dir - cam.CFrame.RightVector end
+        if UIS:IsKeyDown(Enum.KeyCode.D) then dir = dir + cam.CFrame.RightVector end
+        if UIS:IsKeyDown(Enum.KeyCode.Space)    then dir = dir + Vector3.yAxis end
+        if UIS:IsKeyDown(Enum.KeyCode.LeftShift) then dir = dir - Vector3.yAxis end
+        if dir.Magnitude > 0 then dir = dir.Unit end
+        flyBodyVel.Velocity  = dir * speed
+        flyBodyGyro.CFrame   = cam.CFrame
+    end)
+end
+
+local function setFly(enabled, speed)
+    if enabled then startFly(speed) else stopFly() end
+end
+
+-- NoClip
+local noclipConn = nil
+local noclipOriginalCollision = {}
+
+local function saveCollisionState(char)
+    noclipOriginalCollision = {}
+    for _, p in ipairs(char:GetDescendants()) do
+        if p:IsA('BasePart') then
+            noclipOriginalCollision[p] = p.CanCollide
+        end
+    end
+end
+
+local function restoreCollisionState(char)
+    for _, p in ipairs(char:GetDescendants()) do
+        if p:IsA('BasePart') then
+            local original = noclipOriginalCollision[p]
+            if original ~= nil then
+                p.CanCollide = original
+            end
+        end
+    end
+    noclipOriginalCollision = {}
+end
+
+local function setNoClip(enabled)
+    if enabled then
+        local char = LocalPlayer.Character
+        if char then saveCollisionState(char) end
+        noclipConn = RunService.Stepped:Connect(function()
+            local char = LocalPlayer.Character
+            if not char then return end
+            for _, p in ipairs(char:GetDescendants()) do
+                if p:IsA('BasePart') then
+                    p.CanCollide = false
+                end
+            end
+        end)
+    else
+        if noclipConn then noclipConn:Disconnect(); noclipConn = nil end
+        local char = LocalPlayer.Character
+        if char then restoreCollisionState(char) end
+    end
+end
+
+-- No Kill Bricks
+local noKillBricksConn = nil
+local voidParts = {}
+
+local function setNoKillBricks(enabled)
+    if enabled then
+        -- Desactivar CanTouch en todos los Void parts
+        voidParts = {}
+        for _, child in ipairs(workspace:GetDescendants()) do
+            if child:IsA('BasePart') and string.lower(child.Name) == 'void' then
+                child.CanTouch = false
+                table.insert(voidParts, child)
+            end
+        end
+        -- Monitorear nuevos void parts que aparezcan
+        noKillBricksConn = workspace.DescendantAdded:Connect(function(child)
+            if child:IsA('BasePart') and string.lower(child.Name) == 'void' then
+                child.CanTouch = false
+                table.insert(voidParts, child)
+            end
+        end)
+    else
+        if noKillBricksConn then noKillBricksConn:Disconnect(); noKillBricksConn = nil end
+        -- Restaurar CanTouch
+        for _, part in ipairs(voidParts) do
+            if part and part.Parent then
+                part.CanTouch = true
+            end
+        end
+        voidParts = {}
+    end
+end
+
+-- ──────────────────────────────────────────────
+--  CHAKRA SENSE SPOOF
+-- ──────────────────────────────────────────────
+local chakraSpoofValue = nil
+local chakraSpoofConn  = nil
+
+local function startChakraSpoof()
+    local Cooldowns = game:GetService('ReplicatedStorage'):FindFirstChild('Cooldowns')
+    if not Cooldowns then Library:Notify('Cooldowns folder not found!', 3) return end
+    local myPC = Cooldowns:FindFirstChild(LocalPlayer.Name)
+    if not myPC then Library:Notify('Your cooldowns folder not found!', 3) return end
+
+    chakraSpoofValue = myPC:FindFirstChild('Chakra Sense')
+    if not chakraSpoofValue then
+        chakraSpoofValue = Instance.new('NumberValue')
+        chakraSpoofValue.Name   = 'Chakra Sense'
+        chakraSpoofValue.Parent = myPC
+    end
+
+    chakraSpoofConn = RunService.Heartbeat:Connect(function()
+        if chakraSpoofValue and chakraSpoofValue.Parent then
+            chakraSpoofValue.Value = os.time() + 9999
+        end
+    end)
+end
+
+local function stopChakraSpoof()
+    if chakraSpoofConn then chakraSpoofConn:Disconnect(); chakraSpoofConn = nil end
+    if chakraSpoofValue and chakraSpoofValue.Parent then
+        chakraSpoofValue:Destroy(); chakraSpoofValue = nil
+    end
+end
+
+-- Spectate a player by changing CameraSubject (like real Chakra Sense)
+local spectateTarget = nil
+local originalCamSubject = nil
+local originalCamType    = nil
+
+local function spectatePlayer(player)
+    if not player then return end
+    local char = player.Character
+    if not char then return end
+    local hum = char:FindFirstChildOfClass('Humanoid')
+    if not hum then return end
+
+    local cam = workspace.CurrentCamera
+    originalCamSubject = cam.CameraSubject
+    originalCamType    = cam.CameraType
+    spectateTarget     = player
+
+    cam.CameraSubject = hum
+    cam.CameraType    = Enum.CameraType.Custom
+end
+
+local function stopSpectate()
+    if not spectateTarget then return end
+    local cam = workspace.CurrentCamera
+    local myChar = LocalPlayer.Character
+    cam.CameraSubject = (myChar and myChar:FindFirstChildOfClass('Humanoid')) or originalCamSubject
+    cam.CameraType    = originalCamType or Enum.CameraType.Custom
+    spectateTarget = nil
+end
+
+-- ──────────────────────────────────────────────
+--  CHAKRA SENSE DETECT (who is sensing YOU)
+-- ──────────────────────────────────────────────
+local chakraSenseDetectConn = nil
+local notifiedSensers = {}
+
+local function startChakraSenseDetect()
+    local Cooldowns = game:GetService('ReplicatedStorage'):FindFirstChild('Cooldowns')
+    if not Cooldowns then return end
+
+    chakraSenseDetectConn = RunService.Heartbeat:Connect(function()
+        for _, p in ipairs(Players:GetPlayers()) do
+            if p == LocalPlayer then continue end
+            local pc = Cooldowns:FindFirstChild(p.Name)
+            if pc then
+                local cs = pc:FindFirstChild('Chakra Sense')
+                -- They are actively sensing (value = future timestamp)
+                if cs and cs.Value > os.time() then
+                    if not notifiedSensers[p.Name] then
+                        notifiedSensers[p.Name] = true
+                        Library:Notify(p.Name .. ' is Chakra Sensing you!', 4)
+                    end
+                else
+                    notifiedSensers[p.Name] = nil
+                end
+            end
+        end
+    end)
+end
+
+local function stopChakraSenseDetect()
+    if chakraSenseDetectConn then
+        chakraSenseDetectConn:Disconnect()
+        chakraSenseDetectConn = nil
+    end
+    notifiedSensers = {}
+end
+
+-- ──────────────────────────────────────────────
 --  UI - MAIN TAB
 -- ──────────────────────────────────────────────
-local MainGroup = Tabs.Main:AddLeftGroupbox('Main')
+local MainGroupLeft  = Tabs.Main:AddLeftGroupbox('Movement')
+local MainGroupRight = Tabs.Main:AddRightGroupbox('Utility')
 
-MainGroup:AddToggle('ChakraSenseToggle', {
+-- WalkSpeed
+MainGroupLeft:AddToggle('WalkSpeedEnabled', {
+    Text = 'WalkSpeed', Default = false,
+    Callback = function(v)
+        setWalkSpeed(v, Options.WalkSpeedValue.Value)
+    end
+}):AddKeyPicker('WalkSpeedKey', { Default = 'None', NoUI = false, Text = 'WalkSpeed keybind', Mode = 'Toggle',
+    Callback = function(v)
+        Toggles.WalkSpeedEnabled:SetValue(v)
+    end
+})
+
+local WalkSpeedDepbox = MainGroupLeft:AddDependencyBox()
+WalkSpeedDepbox:AddSlider('WalkSpeedValue', {
+    Text = 'Speed', Default = 50, Min = 16, Max = 200, Rounding = 0,
+    Callback = function(v)
+        if Toggles.WalkSpeedEnabled.Value then setWalkSpeed(true, v) end
+    end
+})
+WalkSpeedDepbox:SetupDependencies({{Toggles.WalkSpeedEnabled, true}})
+
+-- Fly
+MainGroupLeft:AddToggle('FlyEnabled', {
+    Text = 'Fly', Default = false,
+    Callback = function(v)
+        setFly(v, Options.FlySpeedValue.Value)
+    end
+}):AddKeyPicker('FlyKey', { Default = 'None', NoUI = false, Text = 'Fly keybind', Mode = 'Toggle',
+    Callback = function(v)
+        Toggles.FlyEnabled:SetValue(v)
+    end
+})
+
+local FlySpeedDepbox = MainGroupLeft:AddDependencyBox()
+FlySpeedDepbox:AddSlider('FlySpeedValue', {
+    Text = 'Fly Speed', Default = 50, Min = 10, Max = 300, Rounding = 0,
+    Callback = function(v)
+        FLY_SPEED = v
+        if Toggles.FlyEnabled.Value then setFly(true, v) end
+    end
+})
+FlySpeedDepbox:SetupDependencies({{Toggles.FlyEnabled, true}})
+
+-- NoClip
+MainGroupLeft:AddToggle('NoClipEnabled', {
+    Text = 'No Clip', Default = false,
+    Callback = function(v) setNoClip(v) end
+}):AddKeyPicker('NoClipKey', { Default = 'None', NoUI = false, Text = 'NoClip keybind', Mode = 'Toggle',
+    Callback = function(v)
+        Toggles.NoClipEnabled:SetValue(v)
+    end
+})
+
+-- No Fall Damage
+MainGroupLeft:AddToggle('NoFallDamage', {
+    Text = 'No Fall Damage', Default = false,
+    Tooltip = 'Disables fall damage',
+    Callback = function(v) setNoFallDamage(v) end
+})
+
+-- No Kill Bricks (MOVED TO MAIN TAB - UTILITY)
+MainGroupRight:AddToggle('NoKillBricks', {
+    Text = 'No Kill Bricks',
+    Default = false,
+    Tooltip = 'Prevents instant kill from lava and kill bricks',
+    Callback = function(v) setNoKillBricks(v) end
+})
+
+-- Respawn
+-- Chakra Sense (spoof)
+MainGroupRight:AddToggle('ChakraSenseToggle', {
     Text = 'Chakra Sense',
     Default = false,
-    Tooltip = 'Show Chakra Sense users count in watermark',
-    Callback = function(Value)
-        ToggleChakraSense(Value)
+    Tooltip = 'Spoof Chakra Sense so you appear as using it to others',
+    Callback = function(v)
+        if v then startChakraSpoof() else stopChakraSpoof() end
+        ToggleChakraSense(v)
+    end
+})
+
+-- Chakra Sense Spectate — click directo en la lista de jugadores del juego
+-- Hookear los PlayerTemplates de la lista nativa del juego
+local playerListConnections = {}
+
+local function hookPlayerTemplate(template)
+    if playerListConnections[template] then return end
+    local nameLabel = template:FindFirstChild('PlayerName')
+    if not nameLabel then return end
+
+    local conn = template.MouseButton1Click:Connect(function()
+        if not Toggles.ChakraSenseToggle.Value then return end
+        local pname = nameLabel.Text
+        local target = Players:FindFirstChild(pname)
+        if not target or target == LocalPlayer then return end
+
+        if spectateTarget == target then
+            stopSpectate()
+            Library:Notify('Stopped Chakra Sense', 2)
+        else
+            spectatePlayer(target)
+            Library:Notify('Chakra Sensing: ' .. pname, 2)
+        end
+    end)
+    playerListConnections[template] = conn
+end
+
+local function hookAllPlayerTemplates()
+    local gui = LocalPlayer.PlayerGui:FindFirstChild('ClientGui')
+    if not gui then return end
+    local mainframe = gui:FindFirstChild('Mainframe')
+    if not mainframe then return end
+    local playerList = mainframe:FindFirstChild('PlayerList')
+    if not playerList then return end
+    local list = playerList:FindFirstChild('List')
+    if not list then return end
+
+    for _, child in ipairs(list:GetChildren()) do
+        if child:IsA('ImageButton') and child.Name == 'PlayerTemplate' then
+            hookPlayerTemplate(child)
+        end
+    end
+
+    list.ChildAdded:Connect(function(child)
+        if child:IsA('ImageButton') and child.Name == 'PlayerTemplate' then
+            task.wait(0.1)
+            hookPlayerTemplate(child)
+        end
+    end)
+end
+
+task.spawn(function()
+    task.wait(2)
+    hookAllPlayerTemplates()
+end)
+
+-- Detect who is sensing you
+MainGroupRight:AddToggle('ChakraSenseDetect', {
+    Text = 'Sense Detector',
+    Default = false,
+    Tooltip = 'Notify when someone is Chakra Sensing you',
+    Callback = function(v)
+        if v then startChakraSenseDetect() else stopChakraSenseDetect() end
     end
 })
 
@@ -881,6 +1326,95 @@ ESPGroup:AddToggle('ESPNames', {
     end
 })
 
+ESPGroup:AddSlider('ESPMaxDistance', {
+    Text = 'Max Distance',
+    Default = 7500,
+    Min = 100,
+    Max = 7500,
+    Rounding = 0,
+    Suffix = ' studs',
+    Tooltip = 'Maximum distance to show ESP',
+    Callback = function(Value)
+        ESPMaxDistance = Value
+    end
+})
+
+-- ──────────────────────────────────────────────
+--  QUALITY OF LIFE
+-- ──────────────────────────────────────────────
+local DataEvent    = game:GetService('ReplicatedStorage'):WaitForChild('Events'):WaitForChild('DataEvent')
+local DataFunction = game:GetService('ReplicatedStorage'):WaitForChild('Events'):WaitForChild('DataFunction')
+local wipeConfirm  = false
+local wipeConfirmTimer = nil
+
+local QoLGroupLeft  = Tabs['Quality Of Life']:AddLeftGroupbox('Character')
+local QoLGroupRight = Tabs['Quality Of Life']:AddRightGroupbox('Account')
+
+QoLGroupLeft:AddButton({
+    Text = 'Respawn',
+    Func = function()
+        local char = LocalPlayer.Character
+        local h = char and char:FindFirstChildOfClass('Humanoid')
+        if h then h.Health = 0 end
+    end,
+    Tooltip = 'Kill and respawn your character'
+})
+
+QoLGroupLeft:AddButton({
+    Text = 'Open Wipe Shop',
+    Func = function()
+        local gui = LocalPlayer.PlayerGui:FindFirstChild('ClientGui')
+        local mainframe = gui and gui:FindFirstChild('Mainframe')
+        local rest = mainframe and mainframe:FindFirstChild('Rest')
+        if rest then
+            local df = rest:FindFirstChild('DestroyFrame')
+            if df then df.Visible = true end
+        end
+    end,
+    Tooltip = 'Opens the Wipe Shop UI'
+})
+
+QoLGroupLeft:AddButton({
+    Text = 'Unlock Burrow',
+    Func = function()
+        DataFunction:InvokeServer('UnlockSkill', 'Burrow')
+        task.wait(0.1)
+        DataFunction:InvokeServer('UnlockSkill', 'Burrow Teleport')
+        Library:Notify('Unlocked Burrow & Burrow Teleport!', 3)
+    end,
+    Tooltip = 'Unlocks Burrow and Burrow Teleport skills'
+})
+
+QoLGroupRight:AddDropdown('ReincarnationGender', {
+    Text = 'Gender',
+    Values = {'Male', 'Female'},
+    Default = 1,
+})
+
+QoLGroupRight:AddButton({
+    Text = 'Wipe',
+    Func = function()
+        if not wipeConfirm then
+            wipeConfirm = true
+            local gender = Options.ReincarnationGender.Value or 'Male'
+            Library:Notify('Click again to wipe as ' .. gender .. '!', 3)
+            if wipeConfirmTimer then task.cancel(wipeConfirmTimer) end
+            wipeConfirmTimer = task.delay(3, function()
+                wipeConfirm = false
+            end)
+        else
+            wipeConfirm = false
+            if wipeConfirmTimer then task.cancel(wipeConfirmTimer) end
+            local gender = Options.ReincarnationGender.Value or 'Male'
+            DataEvent:FireServer('NewGame')
+            task.wait(0.5)
+            DataFunction:InvokeServer('RequestReincarnation', gender)
+            Library:Notify('Wiped and created ' .. gender .. ' slot!', 3)
+        end
+    end,
+    Tooltip = 'Wipe and create new slot with selected gender (double click)'
+})
+
 -- ──────────────────────────────────────────────
 --  UI SETTINGS
 -- ──────────────────────────────────────────────
@@ -909,18 +1443,28 @@ ThemeManager:ApplyToTab(Tabs['UI Settings'])
 SaveManager:LoadAutoloadConfig()
 
 Library:OnUnload(function()
-    if AutoParryConnection then
-        AutoParryConnection:Disconnect()
-        AutoParryConnection = nil
+    if AutoParryConnection then AutoParryConnection:Disconnect(); AutoParryConnection = nil end
+    if ChakraSenseConnection then ChakraSenseConnection:Disconnect(); ChakraSenseConnection = nil end
+    if noFallDmgConn then noFallDmgConn:Disconnect(); noFallDmgConn = nil end
+    if walkspeedConn then walkspeedConn:Disconnect(); walkspeedConn = nil end
+    if noclipConn then noclipConn:Disconnect(); noclipConn = nil end
+    if noKillBricksConn then noKillBricksConn:Disconnect(); noKillBricksConn = nil end
+    stopChakraSenseDetect()
+    stopChakraSpoof()
+    stopSpectate()
+    stopFly()
+    -- limpiar hooks de la lista de jugadores
+    for template, conn in pairs(playerListConnections) do
+        conn:Disconnect()
     end
-    if ChakraSenseConnection then
-        ChakraSenseConnection:Disconnect()
-        ChakraSenseConnection = nil
+    playerListConnections = {}
+    local char = LocalPlayer.Character
+    if char then
+        local h = char:FindFirstChildOfClass('Humanoid')
+        if h then h.WalkSpeed = 16 end
     end
     ParriedPlayers = {}
-    for char in pairs(ESPs) do
-        removeESP(char)
-    end
+    for char in pairs(ESPs) do removeESP(char) end
     Library.Unloaded = true
 end)
 
