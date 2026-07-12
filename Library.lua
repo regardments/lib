@@ -29,13 +29,12 @@ local Library = {
 
     HudRegistry = {};
 
-    FontColor = Color3.fromRGB(255, 255, 255);
-    MainColor = Color3.fromRGB(28, 28, 28);
-    BackgroundColor = Color3.fromRGB(20, 20, 20);
-    AccentColor = Color3.fromRGB(255, 255, 255);
-    OutlineColor = Color3.fromRGB(50, 50, 50);
-    RiskColor = Color3.fromRGB(255, 50, 50),
-
+    FontColor = Color3.fromRGB(255, 235, 245);      -- Blanco con un ligero tono rosado
+    MainColor = Color3.fromRGB(23, 4, 8);           -- Fondo principal (casi negro con rojo)
+    BackgroundColor = Color3.fromRGB(9, 0, 1);      -- Negro profundo
+    AccentColor = Color3.fromRGB(241, 76, 104);     -- Rojo/rosa brillante del texto
+    OutlineColor = Color3.fromRGB(87, 4, 15);       -- Rojo oscuro para bordes
+    RiskColor = Color3.fromRGB(229, 39, 71);        -- Rojo intenso para alertas
     Black = Color3.new(0, 0, 0);
     Font = Enum.Font.Code,
 
