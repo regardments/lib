@@ -2243,24 +2243,36 @@ do
             Parent = DropdownInner;
         });
 
-        local ItemList = Library:Create('TextBox', {
+        local ItemList = Library:CreateLabel({
             Position = UDim2.new(0, 5, 0, 0);
             Size = UDim2.new(1, -5, 1, 0);
             TextSize = 14;
             Text = '--';
             TextXAlignment = Enum.TextXAlignment.Left;
             TextWrapped = false;
-            BackgroundTransparency = 1;
-            ClearTextOnFocus = false;
-            PlaceholderText = 'Search...';
-            PlaceholderColor3 = Color3.fromRGB(120, 120, 120);
-            TextColor3 = Library.FontColor;
-            Font = Library.Font;
             ZIndex = 7;
             Parent = DropdownInner;
         });
 
-        Library:AddToRegistry(ItemList, {
+        local SearchTextBox = Library:Create('TextBox', {
+            Position = UDim2.new(0, 5, 0, 0);
+            Size = UDim2.new(1, -20, 1, 0);
+            TextSize = 14;
+            Text = '';
+            TextXAlignment = Enum.TextXAlignment.Left;
+            TextWrapped = false;
+            BackgroundTransparency = 1;
+            ClearTextOnFocus = false;
+            PlaceholderText = 'Type to search...';
+            PlaceholderColor3 = Color3.fromRGB(120, 120, 120);
+            TextColor3 = Library.FontColor;
+            Font = Library.Font;
+            ZIndex = 8;
+            Visible = false;
+            Parent = DropdownInner;
+        });
+
+        Library:AddToRegistry(SearchTextBox, {
             TextColor3 = 'FontColor';
         });
 
@@ -2354,9 +2366,7 @@ do
                 Str = Dropdown.Value or '';
             end;
 
-            if not Dropdown._searching then
-                ItemList.Text = (Str == '' and '--' or Str);
-            end
+            ItemList.Text = (Str == '' and '--' or Str);
         end;
 
         function Dropdown:GetActiveValues()
@@ -2496,9 +2506,9 @@ do
             RecalculateListSize(Y);
         end;
 
-        ItemList:GetPropertyChangedSignal('Text'):Connect(function()
+        SearchTextBox:GetPropertyChangedSignal('Text'):Connect(function()
             if Dropdown._searching then
-                Dropdown:BuildDropdownList(ItemList.Text)
+                Dropdown:BuildDropdownList(SearchTextBox.Text)
             end
         end)
 
@@ -2512,16 +2522,21 @@ do
 
         function Dropdown:OpenDropdown()
             Dropdown._searching = true;
-            ItemList.Text = '';
-            ItemList:CaptureFocus();
+            SearchTextBox.Text = '';
+            SearchTextBox.Visible = true;
             ListOuter.Visible = true;
             Library.OpenedFrames[ListOuter] = true;
             DropdownArrow.Rotation = 180;
+            task.defer(function()
+                SearchTextBox:CaptureFocus();
+            end)
         end;
 
         function Dropdown:CloseDropdown()
             Dropdown._searching = false;
-            ItemList:ReleaseFocus();
+            SearchTextBox.Text = '';
+            SearchTextBox.Visible = false;
+            SearchTextBox:ReleaseFocus();
             ListOuter.Visible = false;
             Library.OpenedFrames[ListOuter] = nil;
             DropdownArrow.Rotation = 0;
@@ -3008,22 +3023,22 @@ function Library:CreateWindow(...)
 
     local ResizeHandle = Library:Create('TextButton', {
         BackgroundTransparency = 1;
-        Position = UDim2.new(1, -20, 1, -20);
-        Size = UDim2.new(0, 20, 0, 20);
+        Position = UDim2.new(1, -25, 1, -25);
+        Size = UDim2.new(0, 25, 0, 25);
         Text = '';
-        ZIndex = 5;
+        ZIndex = 50;
         Parent = Outer;
     });
 
     local ResizeCorner = Library:Create('ImageLabel', {
         BackgroundTransparency = 1;
-        Position = UDim2.new(1, -14, 1, -14);
-        Size = UDim2.new(0, 10, 0, 10);
+        Position = UDim2.new(1, -16, 1, -16);
+        Size = UDim2.new(0, 12, 0, 12);
         Image = 'rbxassetid://6035047377';
         ImageColor3 = Library.AccentColor;
         ImageTransparency = 0.5;
         ScaleType = Enum.ScaleType.Stretch;
-        ZIndex = 5;
+        ZIndex = 50;
         Parent = Outer;
     });
 
