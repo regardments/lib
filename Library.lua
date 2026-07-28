@@ -40,6 +40,7 @@ local Library = {
 
     OpenedFrames = {};
     DependencyBoxes = {};
+    SearchableElements = {};
 
     Signals = {};
     ScreenGui = ScreenGui;
@@ -2995,6 +2996,316 @@ function Library:CreateWindow(...)
         Parent = Inner;
     });
 
+    local SearchContainer = Library:Create('Frame', {
+        BackgroundColor3 = Library.BackgroundColor;
+        BorderColor3 = Library.OutlineColor;
+        Position = UDim2.new(1, -130, 0, 3);
+        Size = UDim2.new(0, 120, 0, 19);
+        ZIndex = 5;
+        Parent = Inner;
+        ClipsDescendants = true;
+    });
+
+    Library:AddToRegistry(SearchContainer, {
+        BackgroundColor3 = 'BackgroundColor';
+        BorderColor3 = 'OutlineColor';
+    });
+
+    local SearchIcon = Library:CreateLabel({
+        Position = UDim2.new(0, 4, 0, 0);
+        Size = UDim2.new(0, 14, 0, 19);
+        Text = '>>';
+        TextSize = 11;
+        TextColor3 = Library.AccentColor;
+        ZIndex = 6;
+        Parent = SearchContainer;
+    });
+
+    Library:AddToRegistry(SearchIcon, {
+        TextColor3 = 'AccentColor';
+    });
+
+    local SearchInput = Library:Create('TextBox', {
+        BackgroundTransparency = 1;
+        Position = UDim2.new(0, 20, 0, 0);
+        Size = UDim2.new(1, -24, 1, 0);
+        PlaceholderText = 'Search...';
+        PlaceholderColor3 = Color3.fromRGB(120, 120, 120);
+        Text = '';
+        TextColor3 = Library.FontColor;
+        Font = Library.Font;
+        TextSize = 12;
+        TextXAlignment = Enum.TextXAlignment.Left;
+        ClearTextOnFocus = false;
+        ZIndex = 6;
+        Parent = SearchContainer;
+    });
+
+    Library:AddToRegistry(SearchInput, {
+        TextColor3 = 'FontColor';
+    });
+
+    local SearchResults = Library:Create('ScrollingFrame', {
+        BackgroundColor3 = Library.BackgroundColor;
+        BorderColor3 = Library.OutlineColor,
+        Position = UDim2.new(1, -130, 0, 25);
+        Size = UDim2.new(0, 200, 0, 0);
+        CanvasSize = UDim2.new(0, 0, 0, 0);
+        ScrollBarThickness = 4;
+        ScrollBarImageColor3 = Library.AccentColor,
+        ZIndex = 100;
+        Visible = false;
+        Parent = Inner;
+        ClipsDescendants = true;
+    });
+
+    Library:AddToRegistry(SearchResults, {
+        BackgroundColor3 = 'BackgroundColor';
+        BorderColor3 = 'OutlineColor';
+        ScrollBarImageColor3 = 'AccentColor';
+    });
+
+    Library:Create('UIListLayout', {
+        Padding = UDim.new(0, 0);
+        FillDirection = Enum.FillDirection.Vertical;
+        SortOrder = Enum.SortOrder.LayoutOrder;
+        Parent = SearchResults;
+    });
+
+    local function ClearSearchResults()
+        for _, child in next, SearchResults:GetChildren() do
+            if not child:IsA('UIListLayout') then
+                child:Destroy()
+            end
+        end
+        SearchResults.CanvasSize = UDim2.new(0, 0, 0, 0)
+        SearchResults.Visible = false
+    end
+
+    local function PerformSearch(query)
+        ClearSearchResults()
+
+        if query == '' or #query < 2 then
+            return
+        end
+
+        local lowerQuery = string.lower(query)
+        local results = {}
+
+        for TabName, Tab in next, (Window and Window.Tabs or {}) do
+            for GroupboxName, Groupbox in next, (Tab.Groupboxes or {}) do
+                for _, Element in next, Groupbox.Container:GetChildren() do
+                    if Element:IsA('UIListLayout') then continue end
+
+                    local textLabel = nil
+                    local elementText = ''
+
+                    if Element:FindFirstChild('TextLabel', true) then
+                        textLabel = Element:FindFirstChild('TextLabel', true)
+                        elementText = textLabel.Text or ''
+                    elseif Element:IsA('TextLabel') then
+                        textLabel = Element
+                        elementText = Element.Text or ''
+                    end
+
+                    if elementText ~= '' and string.lower(elementText):find(lowerQuery, 1, true) then
+                        table.insert(results, {
+                            Text = elementText;
+                            TabName = TabName;
+                            GroupboxName = GroupboxName;
+                            Element = Element;
+                            TextLabel = textLabel;
+                        })
+                    end
+                end
+            end
+
+            for TabboxName, Tabbox in next, (Tab.Tabboxes or {}) do
+                for SubTabName, SubTab in next, (Tabbox.Tabs or {}) do
+                    if SubTab.Container then
+                        for _, Element in next, SubTab.Container:GetChildren() do
+                            if Element:IsA('UIListLayout') then continue end
+
+                            local textLabel = nil
+                            local elementText = ''
+
+                            if Element:FindFirstChild('TextLabel', true) then
+                                textLabel = Element:FindFirstChild('TextLabel', true)
+                                elementText = textLabel.Text or ''
+                            elseif Element:IsA('TextLabel') then
+                                textLabel = Element
+                                elementText = Element.Text or ''
+                            end
+
+                            if elementText ~= '' and string.lower(elementText):find(lowerQuery, 1, true) then
+                                table.insert(results, {
+                                    Text = elementText;
+                                    TabName = TabName;
+                                    GroupboxName = TabboxName .. ' > ' .. SubTabName;
+                                    Element = Element;
+                                    TextLabel = textLabel;
+                                })
+                            end
+                        end
+                    end
+                end
+            end
+        end
+
+        if #results == 0 then
+            local noResult = Library:Create('TextLabel', {
+                BackgroundTransparency = 1;
+                Size = UDim2.new(1, -8, 0, 24);
+                Text = 'No results found';
+                TextColor3 = Color3.fromRGB(120, 120, 120);
+                Font = Library.Font;
+                TextSize = 12;
+                ZIndex = 101;
+                Parent = SearchResults;
+            })
+            SearchResults.Visible = true
+            SearchResults.Size = UDim2.new(0, 200, 0, 28)
+            SearchResults.CanvasSize = UDim2.new(0, 0, 0, 28)
+            return
+        end
+
+        for i, result in ipairs(results) do
+            local ResultFrame = Library:Create('Frame', {
+                BackgroundColor3 = Library.BackgroundColor;
+                BorderSizePixel = 0;
+                Size = UDim2.new(1, 0, 0, 34);
+                ZIndex = 101;
+                Parent = SearchResults;
+            });
+
+            Library:Create('Frame', {
+                BackgroundColor3 = Library.OutlineColor;
+                BorderSizePixel = 0;
+                Position = UDim2.new(0, 4, 1, -1);
+                Size = UDim2.new(1, -8, 0, 1);
+                ZIndex = 101;
+                Parent = ResultFrame;
+            });
+
+            local PathLabel = Library:CreateLabel({
+                Position = UDim2.new(0, 6, 0, 2);
+                Size = UDim2.new(1, -12, 0, 12);
+                Text = result.TabName .. ' > ' .. result.GroupboxName;
+                TextSize = 10;
+                TextColor3 = Library.AccentColor;
+                TextXAlignment = Enum.TextXAlignment.Left;
+                ZIndex = 102;
+                Parent = ResultFrame;
+            });
+
+            local TextLabel = Library:CreateLabel({
+                Position = UDim2.new(0, 6, 0, 15);
+                Size = UDim2.new(1, -12, 0, 14);
+                Text = result.Text;
+                TextSize = 12;
+                TextColor3 = Library.FontColor;
+                TextXAlignment = Enum.TextXAlignment.Left;
+                TextTruncate = Enum.TextTruncate.AtEnd;
+                ZIndex = 102;
+                Parent = ResultFrame;
+            });
+
+            local HoverZone = Library:Create('TextButton', {
+                BackgroundTransparency = 1;
+                Size = UDim2.new(1, 0, 1, 0);
+                Text = '';
+                ZIndex = 103;
+                Parent = ResultFrame;
+            });
+
+            local function OnHover()
+                ResultFrame.BackgroundColor3 = Library.AccentColor
+            end
+
+            local function OnLeave()
+                ResultFrame.BackgroundColor3 = Library.BackgroundColor
+            end
+
+            HoverZone.MouseEnter:Connect(OnHover)
+            HoverZone.MouseLeave:Connect(OnLeave)
+
+            HoverZone.MouseButton1Click:Connect(function()
+                ClearSearchResults()
+                SearchInput.Text = ''
+
+                local targetTab = Window.Tabs[result.TabName]
+                if targetTab then
+                    for _, Tab in next, Window.Tabs do
+                        Tab:HideTab()
+                    end
+                    targetTab:ShowTab()
+
+                    task.wait()
+                    local elem = result.Element
+                    if elem and elem.Parent then
+                        local canvas = elem
+                        while canvas and canvas ~= game do
+                            if canvas:IsA('ScrollingFrame') then
+                                canvas.CanvasPosition = Vector2.new(
+                                    0,
+                                    math.max(0, (elem.AbsolutePosition.Y - canvas.AbsolutePosition.Y) - 20)
+                                )
+                                break
+                            end
+                            canvas = canvas.Parent
+                        end
+                    end
+                end
+            end)
+        end
+
+        local totalHeight = #results * 34
+        SearchResults.Visible = true
+        SearchResults.Size = UDim2.new(0, 200, 0, math.min(totalHeight + 4, 250))
+        SearchResults.CanvasSize = UDim2.new(0, 0, 0, totalHeight)
+    end
+
+    SearchInput:GetPropertyChangedSignal('Text'):Connect(function()
+        PerformSearch(SearchInput.Text)
+    end)
+
+    SearchInput.Focused:Connect(function()
+        if SearchInput.Text ~= '' then
+            PerformSearch(SearchInput.Text)
+        end
+    end)
+
+    SearchInput.FocusLost:Connect(function()
+        task.delay(0.25, function()
+            if not SearchInput.Focused then
+                ClearSearchResults()
+            end
+        end)
+    end)
+
+    SearchResults.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            if not Library:MouseIsOver({SearchResults, SearchInput, SearchContainer}) then
+                ClearSearchResults()
+            end
+        end
+    end)
+
+    function Library:MouseIsOver(frames)
+        local mousePos = UserInputService:GetMouseLocation()
+        for _, frame in next, frames do
+            if frame and frame.Visible then
+                local absPos = frame.AbsolutePosition
+                local absSize = frame.AbsoluteSize
+                if mousePos.X >= absPos.X and mousePos.X <= absPos.X + absSize.X
+                    and mousePos.Y >= absPos.Y and mousePos.Y <= absPos.Y + absSize.Y then
+                    return true
+                end
+            end
+        end
+        return false
+    end
+
     local MainSectionOuter = Library:Create('Frame', {
         BackgroundColor3 = Library.BackgroundColor;
         BorderColor3 = Library.OutlineColor;
@@ -3148,6 +3459,7 @@ function Library:CreateWindow(...)
         local Tab = {
             Groupboxes = {};
             Tabboxes = {};
+            Name = Name;
         };
 
         local TabButtonWidth = Library:GetTextBounds(Name, Library.Font, 16);
