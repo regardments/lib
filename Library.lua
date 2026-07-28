@@ -2243,15 +2243,25 @@ do
             Parent = DropdownInner;
         });
 
-        local ItemList = Library:CreateLabel({
+        local ItemList = Library:Create('TextBox', {
             Position = UDim2.new(0, 5, 0, 0);
             Size = UDim2.new(1, -5, 1, 0);
             TextSize = 14;
             Text = '--';
             TextXAlignment = Enum.TextXAlignment.Left;
-            TextWrapped = true;
+            TextWrapped = false;
+            BackgroundTransparency = 1;
+            ClearTextOnFocus = false;
+            PlaceholderText = 'Search...';
+            PlaceholderColor3 = Color3.fromRGB(120, 120, 120);
+            TextColor3 = Library.FontColor;
+            Font = Library.Font;
             ZIndex = 7;
             Parent = DropdownInner;
+        });
+
+        Library:AddToRegistry(ItemList, {
+            TextColor3 = 'FontColor';
         });
 
         Library:OnHighlight(DropdownOuter, DropdownOuter,
@@ -2294,6 +2304,7 @@ do
             Size = UDim2.new(1, 0, 1, 0);
             ZIndex = 21;
             Parent = ListOuter;
+            ClipsDescendants = true;
         });
 
         Library:AddToRegistry(ListInner, {
@@ -2343,7 +2354,9 @@ do
                 Str = Dropdown.Value or '';
             end;
 
-            ItemList.Text = (Str == '' and '--' or Str);
+            if not Dropdown._searching then
+                ItemList.Text = (Str == '' and '--' or Str);
+            end
         end;
 
         function Dropdown:GetActiveValues()
@@ -2360,9 +2373,10 @@ do
             end;
         end;
 
-        function Dropdown:BuildDropdownList()
+        function Dropdown:BuildDropdownList(filter)
             local Values = Dropdown.Values;
             local Buttons = {};
+            local filterLower = filter and string.lower(filter) or '';
 
             for _, Element in next, Scrolling:GetChildren() do
                 if not Element:IsA('UIListLayout') then
@@ -2373,6 +2387,10 @@ do
             local Count = 0;
 
             for Idx, Value in next, Values do
+                if filterLower ~= '' and not string.lower(tostring(Value)):find(filterLower, 1, true) then
+                    continue;
+                end;
+
                 local Table = {};
 
                 Count = Count + 1;
@@ -2478,6 +2496,12 @@ do
             RecalculateListSize(Y);
         end;
 
+        ItemList:GetPropertyChangedSignal('Text'):Connect(function()
+            if Dropdown._searching then
+                Dropdown:BuildDropdownList(ItemList.Text)
+            end
+        end)
+
         function Dropdown:SetValues(NewValues)
             if NewValues then
                 Dropdown.Values = NewValues;
@@ -2487,15 +2511,21 @@ do
         end;
 
         function Dropdown:OpenDropdown()
+            Dropdown._searching = true;
+            ItemList.Text = '';
+            ItemList:CaptureFocus();
             ListOuter.Visible = true;
             Library.OpenedFrames[ListOuter] = true;
             DropdownArrow.Rotation = 180;
         end;
 
         function Dropdown:CloseDropdown()
+            Dropdown._searching = false;
+            ItemList:ReleaseFocus();
             ListOuter.Visible = false;
             Library.OpenedFrames[ListOuter] = nil;
             DropdownArrow.Rotation = 0;
+            Dropdown:Display();
         end;
 
         function Dropdown:OnChanged(Func)
@@ -2541,10 +2571,14 @@ do
         InputService.InputBegan:Connect(function(Input)
             if Input.UserInputType == Enum.UserInputType.MouseButton1 then
                 local AbsPos, AbsSize = ListOuter.AbsolutePosition, ListOuter.AbsoluteSize;
+                local DropPos, DropSize = DropdownOuter.AbsolutePosition, DropdownOuter.AbsoluteSize;
 
-                if Mouse.X < AbsPos.X or Mouse.X > AbsPos.X + AbsSize.X
-                    or Mouse.Y < (AbsPos.Y - 20 - 1) or Mouse.Y > AbsPos.Y + AbsSize.Y then
+                local overList = Mouse.X >= AbsPos.X and Mouse.X <= AbsPos.X + AbsSize.X
+                    and Mouse.Y >= AbsPos.Y and Mouse.Y <= AbsPos.Y + AbsSize.Y;
+                local overDrop = Mouse.X >= DropPos.X and Mouse.X <= DropPos.X + DropSize.X
+                    and Mouse.Y >= DropPos.Y and Mouse.Y <= DropPos.Y + DropSize.Y;
 
+                if not overList and not overDrop then
                     Dropdown:CloseDropdown();
                 end;
             end;
@@ -2944,7 +2978,7 @@ function Library:CreateWindow(...)
     end
 
     if type(Config.Title) ~= 'string' then Config.Title = 'No title' end
-    if type(Config.TabPadding) ~= 'number' then Config.TabPadding = 0 end
+    if type(Config.TabPadding) ~= 'number' then Config.TabPadding = 2 end
     if type(Config.MenuFadeTime) ~= 'number' then Config.MenuFadeTime = 0.2 end
 
     if typeof(Config.Position) ~= 'UDim2' then Config.Position = UDim2.fromOffset(175, 50) end
@@ -2971,6 +3005,74 @@ function Library:CreateWindow(...)
     });
 
     Library:MakeDraggable(Outer, 25);
+
+    local ResizeHandle = Library:Create('TextButton', {
+        BackgroundTransparency = 1;
+        Position = UDim2.new(1, -20, 1, -20);
+        Size = UDim2.new(0, 20, 0, 20);
+        Text = '';
+        ZIndex = 5;
+        Parent = Outer;
+    });
+
+    local ResizeCorner = Library:Create('ImageLabel', {
+        BackgroundTransparency = 1;
+        Position = UDim2.new(1, -14, 1, -14);
+        Size = UDim2.new(0, 10, 0, 10);
+        Image = 'rbxassetid://6035047377';
+        ImageColor3 = Library.AccentColor;
+        ImageTransparency = 0.5;
+        ScaleType = Enum.ScaleType.Stretch;
+        ZIndex = 5;
+        Parent = Outer;
+    });
+
+    Library:AddToRegistry(ResizeCorner, {
+        ImageColor3 = 'AccentColor';
+    });
+
+    do
+        local MinSize = Vector2.new(400, 350)
+        local dragging = false
+        local dragStart = Vector2.zero
+        local startSize = Vector2.zero
+
+        ResizeHandle.MouseEnter:Connect(function()
+            ResizeCorner.ImageTransparency = 0
+        end)
+
+        ResizeHandle.MouseLeave:Connect(function()
+            if not dragging then
+                ResizeCorner.ImageTransparency = 0.5
+            end
+        end)
+
+        ResizeHandle.InputBegan:Connect(function(Input)
+            if Input.UserInputType == Enum.UserInputType.MouseButton1 then
+                dragging = true
+                dragStart = Vector2.new(Mouse.X, Mouse.Y)
+                startSize = Vector2.new(Outer.Size.X.Offset, Outer.Size.Y.Offset)
+            end
+        end)
+
+        InputService.InputEnded:Connect(function(Input)
+            if Input.UserInputType == Enum.UserInputType.MouseButton1 then
+                dragging = false
+                ResizeCorner.ImageTransparency = 0.5
+            end
+        end)
+
+        RenderStepped:Connect(function()
+            if dragging then
+                local delta = Vector2.new(Mouse.X, Mouse.Y) - dragStart
+                local newSize = Vector2.new(
+                    math.max(MinSize.X, startSize.X + delta.X),
+                    math.max(MinSize.Y, startSize.Y + delta.Y)
+                )
+                Outer.Size = UDim2.fromOffset(newSize.X, newSize.Y)
+            end
+        end)
+    end
 
     local Inner = Library:Create('Frame', {
         BackgroundColor3 = Library.MainColor;
@@ -3362,58 +3464,6 @@ function Library:CreateWindow(...)
         TabArea.CanvasSize = UDim2.new(0, TabListLayout.AbsoluteContentSize.X + 4, 0, 0);
     end);
 
-    local ScrollLeftBtn = Library:Create('TextButton', {
-        BackgroundColor3 = Library.MainColor;
-        BorderColor3 = Library.OutlineColor;
-        Position = UDim2.new(0, 8, 0, 8);
-        Size = UDim2.new(0, 18, 0, 21);
-        Text = '<';
-        Font = Library.Font;
-        TextColor3 = Library.FontColor;
-        TextSize = 12;
-        ZIndex = 5;
-        Visible = false;
-        Parent = MainSectionInner;
-    });
-
-    local ScrollRightBtn = Library:Create('TextButton', {
-        BackgroundColor3 = Library.MainColor;
-        BorderColor3 = Library.OutlineColor;
-        Position = UDim2.new(1, -26, 0, 8);
-        Size = UDim2.new(0, 18, 0, 21);
-        Text = '>';
-        Font = Library.Font;
-        TextColor3 = Library.FontColor;
-        TextSize = 12;
-        ZIndex = 5;
-        Visible = false;
-        Parent = MainSectionInner;
-    });
-
-    Library:AddToRegistry(ScrollLeftBtn, { BackgroundColor3 = 'MainColor'; BorderColor3 = 'OutlineColor'; });
-    Library:AddToRegistry(ScrollRightBtn, { BackgroundColor3 = 'MainColor'; BorderColor3 = 'OutlineColor'; });
-
-    local function UpdateScrollButtons()
-        if TabArea.CanvasSize.X.Offset > TabArea.AbsoluteSize.X then
-            ScrollLeftBtn.Visible = TabArea.CanvasPosition.X > 0
-            ScrollRightBtn.Visible = TabArea.CanvasPosition.X < TabArea.CanvasSize.X.Offset - TabArea.AbsoluteSize.X
-        else
-            ScrollLeftBtn.Visible = false
-            ScrollRightBtn.Visible = false
-        end
-    end
-
-    ScrollLeftBtn.MouseButton1Click:Connect(function()
-        TabArea.CanvasPosition = UDim2.new(0, math.max(0, TabArea.CanvasPosition.X - 100), 0, 0)
-    end)
-
-    ScrollRightBtn.MouseButton1Click:Connect(function()
-        TabArea.CanvasPosition = UDim2.new(0, math.min(TabArea.CanvasSize.X.Offset - TabArea.AbsoluteSize.X, TabArea.CanvasPosition.X + 100), 0, 0)
-    end)
-
-    TabArea:GetPropertyChangedSignal('CanvasPosition'):Connect(UpdateScrollButtons)
-    TabArea:GetPropertyChangedSignal('AbsoluteSize'):Connect(UpdateScrollButtons)
-
     TabArea.InputBegan:Connect(function(Input)
         if Input.UserInputType == Enum.UserInputType.MouseButton1 then
             local startX = Mouse.X
@@ -3475,6 +3525,20 @@ function Library:CreateWindow(...)
         Library:AddToRegistry(TabButton, {
             BackgroundColor3 = 'BackgroundColor';
             BorderColor3 = 'OutlineColor';
+        });
+
+        local TopLine = Library:Create('Frame', {
+            BackgroundColor3 = Library.AccentColor;
+            BorderSizePixel = 0;
+            Position = UDim2.new(0, 0, 0, 0);
+            Size = UDim2.new(1, 0, 0, 2);
+            BackgroundTransparency = 1;
+            ZIndex = 3;
+            Parent = TabButton;
+        });
+
+        Library:AddToRegistry(TopLine, {
+            BackgroundColor3 = 'AccentColor';
         });
 
         local TabButtonLabel = Library:CreateLabel({
@@ -3562,6 +3626,7 @@ function Library:CreateWindow(...)
                 Tab:HideTab();
             end;
 
+            TopLine.BackgroundTransparency = 0;
             Blocker.BackgroundTransparency = 0;
             TabButton.BackgroundColor3 = Library.MainColor;
             Library.RegistryMap[TabButton].Properties.BackgroundColor3 = 'MainColor';
@@ -3569,6 +3634,7 @@ function Library:CreateWindow(...)
         end;
 
         function Tab:HideTab()
+            TopLine.BackgroundTransparency = 1;
             Blocker.BackgroundTransparency = 1;
             TabButton.BackgroundColor3 = Library.BackgroundColor;
             Library.RegistryMap[TabButton].Properties.BackgroundColor3 = 'BackgroundColor';
@@ -3889,7 +3955,6 @@ function Library:CreateWindow(...)
         end;
 
         Window.Tabs[Name] = Tab;
-        UpdateScrollButtons();
         return Tab;
     end;
 
