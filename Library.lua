@@ -3023,12 +3023,21 @@ function Library:CreateWindow(...)
         BackgroundColor3 = 'BackgroundColor';
     });
 
-    local TabArea = Library:Create('Frame', {
+    local TabArea = Library:Create('ScrollingFrame', {
         BackgroundTransparency = 1;
         Position = UDim2.new(0, 8, 0, 8);
         Size = UDim2.new(1, -16, 0, 21);
         ZIndex = 1;
         Parent = MainSectionInner;
+        ClipsDescendants = true;
+        ScrollBarThickness = 0;
+        ScrollingDirection = Enum.ScrollingDirection.X;
+        VerticalScrollBarPosition = Enum.VerticalScrollBarPosition.Right;
+        CanvasSize = UDim2.new(0, 0, 0, 0);
+        ElasticBehavior = Enum.ElasticBehavior.Never;
+        TopImage = '';
+        BottomImage = '';
+        MidImage = '';
     });
 
     local TabListLayout = Library:Create('UIListLayout', {
@@ -3037,6 +3046,84 @@ function Library:CreateWindow(...)
         SortOrder = Enum.SortOrder.LayoutOrder;
         Parent = TabArea;
     });
+
+    TabListLayout:GetPropertyChangedSignal('AbsoluteContentSize'):Connect(function()
+        TabArea.CanvasSize = UDim2.new(0, TabListLayout.AbsoluteContentSize.X + 4, 0, 0);
+    end);
+
+    local ScrollLeftBtn = Library:Create('TextButton', {
+        BackgroundColor3 = Library.MainColor;
+        BorderColor3 = Library.OutlineColor;
+        Position = UDim2.new(0, 8, 0, 8);
+        Size = UDim2.new(0, 18, 0, 21);
+        Text = '<';
+        Font = Library.Font;
+        TextColor3 = Library.FontColor;
+        TextSize = 12;
+        ZIndex = 5;
+        Visible = false;
+        Parent = MainSectionInner;
+    });
+
+    local ScrollRightBtn = Library:Create('TextButton', {
+        BackgroundColor3 = Library.MainColor;
+        BorderColor3 = Library.OutlineColor;
+        Position = UDim2.new(1, -26, 0, 8);
+        Size = UDim2.new(0, 18, 0, 21);
+        Text = '>';
+        Font = Library.Font;
+        TextColor3 = Library.FontColor;
+        TextSize = 12;
+        ZIndex = 5;
+        Visible = false;
+        Parent = MainSectionInner;
+    });
+
+    Library:AddToRegistry(ScrollLeftBtn, { BackgroundColor3 = 'MainColor'; BorderColor3 = 'OutlineColor'; });
+    Library:AddToRegistry(ScrollRightBtn, { BackgroundColor3 = 'MainColor'; BorderColor3 = 'OutlineColor'; });
+
+    local function UpdateScrollButtons()
+        if TabArea.CanvasSize.X.Offset > TabArea.AbsoluteSize.X then
+            ScrollLeftBtn.Visible = TabArea.CanvasPosition.X > 0
+            ScrollRightBtn.Visible = TabArea.CanvasPosition.X < TabArea.CanvasSize.X.Offset - TabArea.AbsoluteSize.X
+        else
+            ScrollLeftBtn.Visible = false
+            ScrollRightBtn.Visible = false
+        end
+    end
+
+    ScrollLeftBtn.MouseButton1Click:Connect(function()
+        TabArea.CanvasPosition = UDim2.new(0, math.max(0, TabArea.CanvasPosition.X - 100), 0, 0)
+    end)
+
+    ScrollRightBtn.MouseButton1Click:Connect(function()
+        TabArea.CanvasPosition = UDim2.new(0, math.min(TabArea.CanvasSize.X.Offset - TabArea.AbsoluteSize.X, TabArea.CanvasPosition.X + 100), 0, 0)
+    end)
+
+    TabArea:GetPropertyChangedSignal('CanvasPosition'):Connect(UpdateScrollButtons)
+    TabArea:GetPropertyChangedSignal('AbsoluteSize'):Connect(UpdateScrollButtons)
+
+    TabArea.InputBegan:Connect(function(Input)
+        if Input.UserInputType == Enum.UserInputType.MouseButton1 then
+            local startX = Mouse.X
+            local startScroll = TabArea.CanvasPosition.X
+            while InputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) do
+                local delta = startX - Mouse.X
+                local newPos = math.clamp(startScroll + delta, 0, math.max(0, TabArea.CanvasSize.X.Offset - TabArea.AbsoluteSize.X))
+                TabArea.CanvasPosition = UDim2.new(0, newPos, 0, 0)
+                RenderStepped:Wait()
+            end
+        end
+    end)
+
+    TabArea.InputChanged:Connect(function(Input)
+        if Input.UserInputType == Enum.UserInputType.MouseWheel then
+            local scrollDelta = Input.Position.Z
+            local step = scrollDelta > 0 and -60 or 60
+            local newPos = math.clamp(TabArea.CanvasPosition.X + step, 0, math.max(0, TabArea.CanvasSize.X.Offset - TabArea.AbsoluteSize.X))
+            TabArea.CanvasPosition = UDim2.new(0, newPos, 0, 0)
+        end
+    end)
 
     local TabContainer = Library:Create('Frame', {
         BackgroundColor3 = Library.MainColor;
@@ -3490,6 +3577,7 @@ function Library:CreateWindow(...)
         end;
 
         Window.Tabs[Name] = Tab;
+        UpdateScrollButtons();
         return Tab;
     end;
 
